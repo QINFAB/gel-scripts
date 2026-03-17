@@ -1158,8 +1158,8 @@ process_ec_fluxes <- function(
 		, end_time = NULL
 		, avg_period = '30mins'
 		, tz_user = 'UTC'
-		# , dev_north = NULL
-        , declination = NULL
+		, dev_north = NULL
+    , declination = NULL
 		, z_ec = NULL
 		, z_canopy = NULL
 		, rotation_method = c("two axis", "planar fit")
