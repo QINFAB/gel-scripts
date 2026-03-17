@@ -2703,9 +2703,19 @@ ogive_model <- function(fx, m, mu, A0, f = freq) {
                             damp_region <- damp_region[
                                 !(names(damp_region) %in% covariances[sind])]
                             covariances <- covariances[-sind]
-                            fix_lag <- fix_lag[-sind]
-                            dyn_lag <- dyn_lag[, -sind, drop = FALSE]
-                            covariances_variables <- covariances_variables[-sind]
+                            
+                            # Keep fix_lag aligned to current covariances (by name)
+                            fix_lag <- fix_lag[names(fix_lag) %in% covariances]
+                            
+                            # Keep dyn_lag aligned to current covariances (by name & order)
+                            dyn_lag <- dyn_lag[, covariances, drop = FALSE]
+                            
+                            # Keep mapping aligned (by name)
+                            covariances_variables <- covariances_variables[names(covariances_variables) %in% covariances]
+                            
+                            # fix_lag <- fix_lag[-sind]
+                            # dyn_lag <- dyn_lag[, -sind, drop = FALSE]
+                            # covariances_variables <- covariances_variables[-sind]
                             covariances_plotnames <- covariances_plotnames[-sind]
                             scalar_covariances <- scalar_covariances[-sind]
                         }
@@ -2720,9 +2730,19 @@ ogive_model <- function(fx, m, mu, A0, f = freq) {
                             damp_region <- damp_region[
                                 !(names(damp_region) %in% covariances[sind])]
                             covariances <- covariances[-sind]
-                            fix_lag <- fix_lag[-sind]
-                            dyn_lag <- dyn_lag[, -sind, drop = FALSE]
-                            covariances_variables <- covariances_variables[-sind]
+                            
+                            # Keep fix_lag aligned to current covariances (by name)
+                            fix_lag <- fix_lag[names(fix_lag) %in% covariances]
+                            
+                            # Keep dyn_lag aligned to current covariances (by name & order)
+                            dyn_lag <- dyn_lag[, covariances, drop = FALSE]
+                            
+                            # Keep mapping aligned (by name)
+                            covariances_variables <- covariances_variables[names(covariances_variables) %in% covariances]
+                            
+                            # fix_lag <- fix_lag[-sind]
+                            # dyn_lag <- dyn_lag[, -sind, drop = FALSE]
+                            # covariances_variables <- covariances_variables[-sind]
                             covariances_plotnames <- covariances_plotnames[-sind]
                             scalar_covariances <- scalar_covariances[-sind]
                         }
