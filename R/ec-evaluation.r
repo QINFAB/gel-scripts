@@ -1191,7 +1191,7 @@ process_ec_fluxes <- function(
         # fix lag in seconds
 		, lag_fix = list(uxw = 0, wxT = 0, 
 		                 wxnh3_ppb = list("[0,90)" = 0.15, "[90,180)" = 0.4, "[180,270)" = -0.4, "[270,360]" = -0.4),
-		                 wxnh3_ugm3 = list("[0,90)" = 0.15, "[90,180)" = 0.4, "[180,270)" = -0.4, "[270,360]" = -0.4),
+		                 wxnh3_ugm3 = list("[0,90)" = 0.15, "[90,180)" = 0.4, "[180,270)" = -0.3, "[270,360]" = -0.4),
 		                 wxh2o_mmolm3 = -0.2, wxco2_mmolm3 = -0.2
 		)
 # 		, lag_fix = c(uxw = 0, wxT = 0, wxnh3_ppb = -0.4, wxnh3_ugm3 = -0.4, 
