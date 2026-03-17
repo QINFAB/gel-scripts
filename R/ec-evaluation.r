@@ -1158,7 +1158,7 @@ process_ec_fluxes <- function(
 		, end_time = NULL
 		, avg_period = '30mins'
 		, tz_user = 'UTC'
-		, dev_north = NULL
+		# , dev_north = NULL
         , declination = NULL
 		, z_ec = NULL
 		, z_canopy = NULL
@@ -1189,8 +1189,13 @@ process_ec_fluxes <- function(
         , na_limits_method = c('norepl', 'median', 'dist', 'squaredist')[4]
 		, covariances = c('uxw', 'wxT', 'wxnh3_ugm3', 'wxh2o_mmolm3', 'wxco2_mmolm3')
         # fix lag in seconds
-		, lag_fix = c(uxw = 0, wxT = 0, wxnh3_ppb = -0.4, wxnh3_ugm3 = -0.4, 
-            wxh2o_mmolm3 = -0.2, wxco2_mmolm3 = -0.2)
+		, lag_fix = list(uxw = 0, wxT = 0, 
+		                 wxnh3_ppb = list("[0,90)" = 0.15, "[90,180)" = 0.4, "[180,270)" = -0.4, "[270,360]" = -0.4),
+		                 wxnh3_ugm3 = list("[0,90)" = 0.15, "[90,180)" = 0.4, "[180,270)" = -0.4, "[270,360]" = -0.4),
+		                 wxh2o_mmolm3 = -0.2, wxco2_mmolm3 = -0.2
+		)
+# 		, lag_fix = c(uxw = 0, wxT = 0, wxnh3_ppb = -0.4, wxnh3_ugm3 = -0.4, 
+#             wxh2o_mmolm3 = -0.2, wxco2_mmolm3 = -0.2)
         # dyn lag in seconds around lag_fix
 		, lag_dyn = c(uxw = 0.5, wxT = 0.5, wxnh3_ppb = 1.5, wxnh3_ugm3 = 1.5, 
             wxh2o_mmolm3 = 1.5, wxco2_mmolm3 = 1.5)
@@ -2125,11 +2130,11 @@ process_ec_fluxes <- function(
 
         # fix and dyn lags:                                      
         # ------------------------------------------------------------------------------ 
-        input_fix_lag <- round(lag_fix * rec_Hz)
-        input_dyn_lag <- rbind(
-            lower = round((lag_fix - lag_dyn) * rec_Hz)
-            , upper = round((lag_fix + lag_dyn) * rec_Hz)
-        )
+        # input_fix_lag <- round(lag_fix * rec_Hz)
+        # input_dyn_lag <- rbind(
+        #     lower = round((lag_fix - lag_dyn) * rec_Hz)
+        #     , upper = round((lag_fix + lag_dyn) * rec_Hz)
+        # )
 
         # be verbose
         cat("\n~~~\nCalculation will include",
@@ -2261,13 +2266,126 @@ process_ec_fluxes <- function(
 
         ### correct for sonic north deviation
         daily_data[, WD := (WD + d_north[.GRP]) %% 360, by = bin]
-
+        ########################## WD dependent fix lag #############################################
+        
+        ### example run
+        
+        # lag_fix <- list(
+        #   uxw = 0,
+        #   wxT = 0,
+        # 
+        #   wxnh3_ppb = list(
+        #     "[20,30)"   = 0.15,
+        #     "[30,70)"   = 0.40,
+        #     "[180,270)" = -0.40,
+        #     "[270,360]" = -0.40,
+        #     "default"    = 0), # default value if the range does not cover
+        #   wxnh3_ugm3 = list(
+        #     "[0,90)"    = 0.15,
+        #     "[90,180)"  = 0.40,
+        #     "[180,270)" = -0.40,
+        #     "[270,360]" = -0.40
+        #   ),
+        # 
+        #   wxh2o_mmolm3 = -0.2,
+        #   wxco2_mmolm3 = -0.2
+        # )
+        # real_fix_lag (30,lag_fix)
+        
+        # x is wind direction, data is one of the variable defined in the fixed lag.        
+        get_numeric_interval <- function(x, data) {
+          # try to search for all the interval
+          for(inter in names(data)) {
+            # skip the default value first
+            if (inter %in% c("default")) next
+            # get a interval as range in numeric
+            Range <- as.numeric(unlist(regmatches(inter, gregexpr("[0-9]+",inter))))
+            if (length(Range) < 2) next 
+            
+            Lowerrange <- Range[1]
+            Higherrange <- Range[2]
+            CloseHigh <- grepl("\\]", inter)
+            
+            if (x>=Lowerrange && (x < Higherrange || (CloseHigh && x == Higherrange)))
+            { return(as.numeric(data[[inter]]))
+              
+            }
+          }
+          # if wind direction not in the define wind interval, and a default value is defined, return define value
+          if ("default" %in% names(data)) {
+            return(as.numeric(data[["default"]]))
+          }
+          # otherwise stop running
+          stop(sprintf("invalid wind vector: %s", x))
+          
+        } 
+        
+        # here x is wind direction, and data is the pre-define fixed lag for all variables, could be a list or vector
+        real_fix_lag  <- function(x, data) {
+          out <- numeric(0)
+          
+          for (vari in names (data)) {
+            variable1 <- data[[vari]]
+            # if define a wind direction dependent lag time
+            if(is.list(variable1) && !is.data.frame(variable1)) {
+              lag <- get_numeric_interval(x,variable1)
+              
+              # give a constant lag time
+            } else if (is.numeric(variable1)) {
+              lag <- variable1
+            } else {
+              
+              stop(sprintf(
+                "Unsupported type for '%s'. Expected numeric (constant) or a list (intervals). Got class: %s",
+                nm, paste(class(obj), collapse = "/")))
+              
+            } 
+            out[vari] <- lag
+            
+          }
+          
+          return(out)
+        } 
+        
+        lag_fix_by_bin <- daily_data[, {
+          wd_this <- WD[1]    # one WD per interval after rotation
+          vals <- real_fix_lag(wd_this, lag_fix)
+          as.list(vals)
+        }, by = bin]
+        
+        # Convert to samples
+        lag_fix_by_bin[, (names(lag_fix)) := lapply(.SD, function(x) round(x * rec_Hz)),
+                       .SDcols = names(lag_fix)]
+        
+        # --- Per-bin dynamic lag windows (in seconds) -------------------------------
+        lag_dyn_by_bin <- daily_data[, {
+          wd_this <- WD[1]
+          vals <- real_fix_lag(wd_this, lag_fix)
+          
+          lower <- vals - lag_dyn[covariances]
+          upper <- vals + lag_dyn[covariances]
+          
+          out <- as.list(c(lower, upper))
+          names(out) <- c(paste0("lower_", covariances),
+                          paste0("upper_", covariances))
+          out
+        }, by = bin]
+        
+        # Convert to samples
+        for (nm in names(lag_dyn_by_bin)[-1]) {
+          lag_dyn_by_bin[, (nm) := round(get(nm) * rec_Hz)]
+        }
+        
         # get relevant environment objects
         env_obj <- setdiff(ls(envir = current_env), c(
             'cl', 'ncores', 'run_parallel', 'daily_data', 
             'current_env', 'rotation_args', 'mag_dec'
         ))
         eobj <- mget(env_obj, envir = current_env)
+        
+        #Pass THESE TABLES INTO THE ENVIRONMENT
+        eobj$lag_fix_by_bin <- lag_fix_by_bin
+        eobj$lag_dyn_by_bin <- lag_dyn_by_bin
 
         # loop over intervals: call MAIN function
         if (run_parallel) {
@@ -2546,8 +2664,21 @@ ogive_model <- function(fx, m, mu, A0, f = freq) {
             scalar_covariances <- input_scalar_covariances
             flux_variables <- input_flux_variables
             plot_timeseries <- input_plot_timeseries
-            fix_lag <- input_fix_lag
-            dyn_lag <- input_dyn_lag
+            ### Get fix and dyn lag for this interval ##################
+            this_bin <- .BY[[1]]
+            # fixed lag (samples)
+            fix_lag <- unlist(lag_fix_by_bin[bin == this_bin, ..input_covariances])
+            
+            # dynamic lag range (samples)
+            dyn_lag <- rbind(
+              lower = unlist(lag_dyn_by_bin[bin == this_bin,
+                                            paste0("lower_", input_covariances), with = FALSE]),
+              upper = unlist(lag_dyn_by_bin[bin == this_bin,
+                                            paste0("upper_", input_covariances), with = FALSE])
+            )
+            ###########change by WQ ################  
+            # fix_lag <- input_fix_lag
+            # dyn_lag <- input_dyn_lag
             damping_reference <- input_damping_reference
             damp_region <- input_damp_region
             if (
